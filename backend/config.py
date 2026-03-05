@@ -10,7 +10,10 @@ class Settings(BaseSettings):
     do_inference_base_url: str = "https://inference.do-ai.run/v1/"
     do_model: str = "llama3-8b-instruct"
 
-    # Gemini (fallback if DO not configured — free tier via OpenAI-compatible endpoint)
+    # Groq (fallback #1 — free tier, llama-3.1-70b, OpenAI-compatible)
+    groq_api_key: str = ""
+
+    # Gemini (fallback #2 — free tier via OpenAI-compatible endpoint)
     gemini_api_key: str = ""
 
     # GitHub
@@ -32,7 +35,7 @@ class Settings(BaseSettings):
 
     @property
     def use_mock(self) -> bool:
-        return self.mock_mode or (not self.do_model_access_key and not self.gemini_api_key)
+        return self.mock_mode or (not self.do_model_access_key and not self.groq_api_key and not self.gemini_api_key)
 
     @property
     def use_do_gradient(self) -> bool:

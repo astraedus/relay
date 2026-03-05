@@ -155,6 +155,34 @@ async def _call_do_gradient(user_message: str) -> BriefingReport | None:
         return None
 
 
+async def _call_groq(user_message: str) -> BriefingReport | None:
+    """Call Groq (free) as fallback via OpenAI-compatible endpoint."""
+    if not _OPENAI_AVAILABLE or not settings.groq_api_key:
+        return None
+    try:
+        client = _OpenAI(
+            api_key=settings.groq_api_key,
+            base_url="https://api.groq.com/openai/v1/",
+        )
+        response = client.chat.completions.create(
+            model="llama-3.1-70b-versatile",
+            max_tokens=1024,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_message},
+            ],
+        )
+        content = response.choices[0].message.content or ""
+        data = _parse_llm_response(content)
+        return BriefingReport(**data)
+    except json.JSONDecodeError as e:
+        logger.error("Failed to parse Groq JSON response: %s", e)
+        return None
+    except Exception as e:
+        logger.error("Groq API call failed: %s", e)
+        return None
+
+
 async def _call_gemini(user_message: str) -> BriefingReport | None:
     """Call Gemini (free) as fallback via OpenAI-compatible endpoint."""
     if not _OPENAI_AVAILABLE or not settings.gemini_api_key:
@@ -195,13 +223,17 @@ async def synthesize_briefing(
 
     user_message = _build_user_message(repo_activities, slack_messages, team_name, hours)
 
-    # Priority: DO Gradient AI → Gemini (free) → mock
+    # Priority: DO Gradient AI → Groq (free) → Gemini (free) → mock
     if settings.use_do_gradient:
         logger.info("Using DigitalOcean Gradient AI (model=%s)", settings.do_model)
         result = await _call_do_gradient(user_message)
         if result:
             return result
-        logger.warning("DO Gradient failed; falling back to Gemini")
+        logger.warning("DO Gradient failed; falling back to Groq")
+
+    result = await _call_groq(user_message)
+    if result:
+        return result
 
     result = await _call_gemini(user_message)
     if result:
