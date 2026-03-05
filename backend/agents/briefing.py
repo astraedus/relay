@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
 
 try:
     from openai import OpenAI as _OpenAI
@@ -94,7 +93,7 @@ def _mock_briefing(
         f"{team_name} had {total_commits} commit(s) and {total_prs} PR(s) across "
         f"{', '.join(repo_names)} in the last 24 hours. "
         f"There are {total_issues} issue(s) with recent activity. "
-        "(This is a mock briefing — set ANTHROPIC_API_KEY for AI-generated summaries.)"
+        "(Mock briefing — set DO_MODEL_ACCESS_KEY or ANTHROPIC_API_KEY for AI-generated summaries.)"
     )
 
     key_decisions: list[str] = []
@@ -122,46 +121,67 @@ def _mock_briefing(
     )
 
 
-def _parse_content(content: str) -> BriefingReport:
-    """Parse JSON content, stripping markdown fences if present."""
+def _parse_llm_response(content: str) -> dict:
+    """Extract and parse JSON from LLM response, stripping code fences."""
     content = content.strip()
     if content.startswith("```"):
-        content = content.split("```")[1]
+        parts = content.split("```")
+        content = parts[1] if len(parts) > 1 else content
         if content.startswith("json"):
             content = content[4:]
         content = content.strip()
-    data = json.loads(content)
-    return BriefingReport(**data)
+    return json.loads(content)
 
 
-async def _run_with_do_gradient(user_message: str) -> str:
-    """Call DigitalOcean Gradient AI serverless inference (OpenAI-compatible)."""
-    client = _OpenAI(
-        base_url=settings.do_inference_base_url,
-        api_key=settings.do_model_access_key,
-    )
-    response = client.chat.completions.create(
-        model=settings.do_model,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_message},
-        ],
-        temperature=0.3,
-        max_completion_tokens=1024,
-    )
-    return response.choices[0].message.content or ""
+async def _call_do_gradient(user_message: str) -> BriefingReport | None:
+    """Call DigitalOcean Gradient AI via OpenAI-compatible endpoint."""
+    if not _OPENAI_AVAILABLE or not settings.do_model_access_key:
+        return None
+    try:
+        client = _OpenAI(
+            api_key=settings.do_model_access_key,
+            base_url=settings.do_inference_base_url,
+        )
+        response = client.chat.completions.create(
+            model=settings.do_model,
+            max_tokens=1024,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_message},
+            ],
+        )
+        content = response.choices[0].message.content or ""
+        data = _parse_llm_response(content)
+        return BriefingReport(**data)
+    except json.JSONDecodeError as e:
+        logger.error("Failed to parse DO Gradient JSON response: %s", e)
+        return None
+    except Exception as e:
+        logger.error("DO Gradient API call failed: %s", e)
+        return None
 
 
-async def _run_with_anthropic(user_message: str) -> str:
-    """Fallback: Anthropic Claude."""
-    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-    response = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=1024,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_message}],
-    )
-    return response.content[0].text
+async def _call_anthropic(user_message: str) -> BriefingReport | None:
+    """Call Anthropic Claude as fallback."""
+    if not _ANTHROPIC_AVAILABLE or not settings.anthropic_api_key:
+        return None
+    try:
+        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+        response = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=1024,
+            system=SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": user_message}],
+        )
+        content = response.content[0].text
+        data = _parse_llm_response(content)
+        return BriefingReport(**data)
+    except json.JSONDecodeError as e:
+        logger.error("Failed to parse Anthropic JSON response: %s", e)
+        return None
+    except Exception as e:
+        logger.error("Anthropic API call failed: %s", e)
+        return None
 
 
 async def synthesize_briefing(
@@ -176,21 +196,17 @@ async def synthesize_briefing(
 
     user_message = _build_user_message(repo_activities, slack_messages, team_name, hours)
 
-    try:
-        if settings.use_do_gradient and _OPENAI_AVAILABLE:
-            logger.info("Synthesizing briefing via DigitalOcean Gradient AI")
-            raw = await _run_with_do_gradient(user_message)
-        elif _ANTHROPIC_AVAILABLE and settings.anthropic_api_key:
-            logger.info("Synthesizing briefing via Anthropic Claude (fallback)")
-            raw = await _run_with_anthropic(user_message)
-        else:
-            logger.warning("No AI backend configured — returning mock briefing")
-            return _mock_briefing(repo_activities, slack_messages, team_name)
+    # Priority: DO Gradient AI → Anthropic → mock
+    if settings.use_do_gradient:
+        logger.info("Using DigitalOcean Gradient AI (model=%s)", settings.do_model)
+        result = await _call_do_gradient(user_message)
+        if result:
+            return result
+        logger.warning("DO Gradient failed; falling back to Anthropic")
 
-        return _parse_content(raw)
-    except json.JSONDecodeError as e:
-        logger.error("Failed to parse AI JSON response: %s", e)
-        return _mock_briefing(repo_activities, slack_messages, team_name)
-    except Exception as e:
-        logger.error("AI synthesis failed: %s", e)
-        return _mock_briefing(repo_activities, slack_messages, team_name)
+    result = await _call_anthropic(user_message)
+    if result:
+        return result
+
+    logger.warning("All AI backends failed; returning mock briefing")
+    return _mock_briefing(repo_activities, slack_messages, team_name)
