@@ -7,10 +7,10 @@ Built for the DigitalOcean Gradient AI Hackathon (March 2026, $20K prize).
 ## Stack
 
 - **Backend**: Python FastAPI + aiosqlite
-- **AI**: Anthropic Claude claude-sonnet-4-6 (falls back to mock if no API key)
+- **AI**: DigitalOcean Gradient AI serverless inference (Llama 3 8B — primary) + Anthropic fallback
 - **GitHub**: httpx + GitHub REST API
 - **Slack**: slack-sdk
-- **Frontend**: Next.js 15 + Tailwind-style dark theme
+- **Frontend**: Next.js 15 + dark theme
 - **Deploy**: DigitalOcean App Platform
 
 ## Local Setup
