@@ -7,7 +7,7 @@ Built for the DigitalOcean Gradient AI Hackathon (March 2026, $20K prize).
 ## Stack
 
 - **Backend**: Python FastAPI + aiosqlite
-- **AI**: DigitalOcean Gradient AI serverless inference (Llama 3 8B — primary) + Anthropic fallback
+- **AI**: DigitalOcean Gradient AI serverless inference (Llama 3 8B — primary) + Gemini fallback (free)
 - **GitHub**: httpx + GitHub REST API
 - **Slack**: slack-sdk
 - **Frontend**: Next.js 15 + dark theme

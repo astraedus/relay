@@ -10,12 +10,6 @@ except ImportError:
     _OpenAI = None  # type: ignore[assignment,misc]
     _OPENAI_AVAILABLE = False
 
-try:
-    import anthropic
-    _ANTHROPIC_AVAILABLE = True
-except ImportError:
-    anthropic = None  # type: ignore[assignment]
-    _ANTHROPIC_AVAILABLE = False
 
 from backend.config import settings
 from backend.models.schemas import BriefingReport, RepoActivity, SlackMessage
@@ -161,26 +155,31 @@ async def _call_do_gradient(user_message: str) -> BriefingReport | None:
         return None
 
 
-async def _call_anthropic(user_message: str) -> BriefingReport | None:
-    """Call Anthropic Claude as fallback."""
-    if not _ANTHROPIC_AVAILABLE or not settings.anthropic_api_key:
+async def _call_gemini(user_message: str) -> BriefingReport | None:
+    """Call Gemini (free) as fallback via OpenAI-compatible endpoint."""
+    if not _OPENAI_AVAILABLE or not settings.gemini_api_key:
         return None
     try:
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-        response = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=1024,
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": user_message}],
+        client = _OpenAI(
+            api_key=settings.gemini_api_key,
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
         )
-        content = response.content[0].text
+        response = client.chat.completions.create(
+            model="gemini-2.0-flash",
+            max_tokens=1024,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_message},
+            ],
+        )
+        content = response.choices[0].message.content or ""
         data = _parse_llm_response(content)
         return BriefingReport(**data)
     except json.JSONDecodeError as e:
-        logger.error("Failed to parse Anthropic JSON response: %s", e)
+        logger.error("Failed to parse Gemini JSON response: %s", e)
         return None
     except Exception as e:
-        logger.error("Anthropic API call failed: %s", e)
+        logger.error("Gemini API call failed: %s", e)
         return None
 
 
@@ -196,15 +195,15 @@ async def synthesize_briefing(
 
     user_message = _build_user_message(repo_activities, slack_messages, team_name, hours)
 
-    # Priority: DO Gradient AI → Anthropic → mock
+    # Priority: DO Gradient AI → Gemini (free) → mock
     if settings.use_do_gradient:
         logger.info("Using DigitalOcean Gradient AI (model=%s)", settings.do_model)
         result = await _call_do_gradient(user_message)
         if result:
             return result
-        logger.warning("DO Gradient failed; falling back to Anthropic")
+        logger.warning("DO Gradient failed; falling back to Gemini")
 
-    result = await _call_anthropic(user_message)
+    result = await _call_gemini(user_message)
     if result:
         return result
 

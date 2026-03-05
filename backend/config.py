@@ -10,8 +10,8 @@ class Settings(BaseSettings):
     do_inference_base_url: str = "https://inference.do-ai.run/v1/"
     do_model: str = "llama3-8b-instruct"
 
-    # Anthropic (fallback if DO not configured)
-    anthropic_api_key: str = ""
+    # Gemini (fallback if DO not configured — free tier via OpenAI-compatible endpoint)
+    gemini_api_key: str = ""
 
     # GitHub
     github_token: str = ""
@@ -32,7 +32,7 @@ class Settings(BaseSettings):
 
     @property
     def use_mock(self) -> bool:
-        return self.mock_mode or (not self.do_model_access_key and not self.anthropic_api_key)
+        return self.mock_mode or (not self.do_model_access_key and not self.gemini_api_key)
 
     @property
     def use_do_gradient(self) -> bool:
