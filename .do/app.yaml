@@ -1,0 +1,51 @@
+name: relay
+region: nyc
+services:
+  - name: backend
+    source_dir: /backend
+    github:
+      repo: astraedus/relay
+      branch: main
+      deploy_on_push: true
+    build_command: pip install -r requirements.txt
+    run_command: uvicorn backend.main:app --host 0.0.0.0 --port 8080
+    http_port: 8080
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    envs:
+      - key: ANTHROPIC_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: GITHUB_TOKEN
+        scope: RUN_TIME
+        type: SECRET
+      - key: SLACK_BOT_TOKEN
+        scope: RUN_TIME
+        type: SECRET
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: relay.db
+      - key: PORT
+        scope: RUN_TIME
+        value: "8080"
+    routes:
+      - path: /api
+      - path: /health
+
+  - name: frontend
+    source_dir: /frontend
+    github:
+      repo: astraedus/relay
+      branch: main
+      deploy_on_push: true
+    build_command: npm install --legacy-peer-deps && npm run build
+    run_command: npm run start
+    http_port: 3001
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    envs:
+      - key: NEXT_PUBLIC_API_URL
+        scope: BUILD_TIME
+        value: ${backend.PUBLIC_URL}
+    routes:
+      - path: /
