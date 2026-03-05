@@ -87,7 +87,7 @@ def _mock_briefing(
         f"{team_name} had {total_commits} commit(s) and {total_prs} PR(s) across "
         f"{', '.join(repo_names)} in the last 24 hours. "
         f"There are {total_issues} issue(s) with recent activity. "
-        "(Mock briefing — set DO_MODEL_ACCESS_KEY or ANTHROPIC_API_KEY for AI-generated summaries.)"
+        "(Mock briefing — set DO_MODEL_ACCESS_KEY or GEMINI_API_KEY for AI-generated summaries.)"
     )
 
     key_decisions: list[str] = []
