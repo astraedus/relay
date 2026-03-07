@@ -4,6 +4,14 @@ Async team briefing agent. Connects to GitHub repos and Slack workspaces, extrac
 
 Built for the DigitalOcean Gradient AI Hackathon (March 2026, $20K prize).
 
+## Hackathon Submissions
+
+| Hackathon | Platform | Track | Status |
+|-----------|----------|-------|--------|
+| [DigitalOcean Gradient AI 2026](https://digitalocean.devpost.com/) | DevPost | Open | BLOCKED -- DO_MODEL_ACCESS_KEY requires payment method (card rejected). Deadline March 18. |
+
+**Special adaptations**: Multi-tier AI fallback (DO Gradient AI -> Anthropic -> Mock) so app works without DO key. DevPost registered as participant #2251.
+
 ## Stack
 
 - **Backend**: Python FastAPI + aiosqlite
